@@ -94,6 +94,18 @@ Obtenir une cle gratuite sur https://portal.api.esante.gouv.fr :
 3. S'abonner a "API Annuaire Sante en libre acces"
 4. Recuperer la cle ESANTE-API-KEY
 
+## Skill AI (Claude Code, Cursor, Codex, Windsurf, Gemini...)
+
+Ce SDK inclut un **skill AI** qui donne a votre agent une connaissance complete du SDK.
+
+```bash
+bash vendor/qrcommunication/rppsapi/skill/install.sh
+```
+
+Agents supportes : Claude Code, Cursor, Codex, Windsurf, Cline, Aider, Gemini CLI.
+
+Installation manuelle : `cp -r vendor/qrcommunication/rppsapi/skill ~/.claude/skills/sdk-rpps`
+
 ## Licence
 
 PolyForm Noncommercial 1.0.0 — Voir [LICENSE](./LICENSE)

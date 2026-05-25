@@ -26,7 +26,17 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
 
-      - name: Run tests
-        run: 
-        find src -name "*.php" -exec php -l {} ; | grep -v "No syntax errors" || echo "All syntax OK"
-        echo "Note: no PHPUnit tests in this repo, ran syntax check only"
+      - name: PHP syntax check (no PHPUnit tests in repo)
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            out=$(php -l "$f" 2>&1)
+            if ! echo "$out" | grep -q "No syntax errors"; then
+              echo "✗ $f"
+              echo "$out"
+              fail=1
+            fi
+          done < <(find src -name "*.php")
+          [ "$fail" = "0" ] && echo "✓ All PHP files syntactically valid"
+          exit $fail

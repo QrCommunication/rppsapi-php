@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +27,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
     permissions:
       contents: write
     steps:

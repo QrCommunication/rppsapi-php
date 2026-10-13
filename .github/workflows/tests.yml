@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: PHP ${{ matrix.php-version }}
-    runs-on: [self-hosted, linux, x64, hetzner, qrcom]
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         php-version: ['8.3']

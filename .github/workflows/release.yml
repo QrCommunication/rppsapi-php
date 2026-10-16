@@ -82,7 +82,10 @@ jobs:
           start = matches[0] + 1
           end = next((index for index in range(start, len(lines)) if re.match(r'^##(?:[ \t]|$)', lines[index])), len(lines))
           notes = '\n'.join(lines[start:end]).strip()
-          if not re.sub(r'<!--.*?-->', '', notes, flags=re.S).strip():
+          visible_notes = re.sub(r'<!--.*?-->', '', notes, flags=re.S)
+          if '<!--' in visible_notes:
+              raise SystemExit('The matching changelog section contains an unterminated HTML comment.')
+          if not visible_notes.strip():
               raise SystemExit('The matching changelog section must contain release notes.')
           Path('release_notes.md').write_text(notes + '\n', encoding='utf-8')
           PY

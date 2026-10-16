@@ -24,7 +24,7 @@
     ],
     "homepage": "https://github.com/QrCommunication/rppsapi-php",
     "require": {
-        "php": ">=8.1",
+        "php": ">=8.2",
         "guzzlehttp/guzzle": "^7.0 || ^8.0",
         "guzzlehttp/promises": "^2.0 || ^3.0"
     },
@@ -40,6 +40,9 @@
         "psr-4": {
             "QrCommunication\\RppsApi\\Tests\\": "tests/"
         }
+    },
+    "scripts": {
+        "test": "@php vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-empty-test-suite --fail-on-risky --fail-on-warning tests/"
     },
     "minimum-stability": "stable",
     "config": {

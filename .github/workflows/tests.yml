@@ -5,38 +5,84 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   test:
-    name: PHP ${{ matrix.php-version }}
+    name: PHP ${{ matrix.php-version }} / ${{ matrix.dependencies }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        php-version: ['8.3']
+        php-version: ['8.2', '8.3', '8.4', '8.5']
+        dependencies: [latest]
+        include:
+          - php-version: '8.2'
+            dependencies: lowest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: json, curl
+          extensions: json, curl, dom, mbstring, xml, xmlwriter
           coverage: none
+          tools: composer:2.10.3
+        env:
+          fail-fast: true
 
-      - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist
+      - name: Validate library manifest
+        run: composer validate --strict --no-interaction
 
-      - name: PHP syntax check (no PHPUnit tests in repo)
+      - name: Resolve fresh dependencies
+        env:
+          DEPENDENCY_RESOLUTION: ${{ matrix.dependencies }}
         run: |
-          set -e
-          fail=0
-          while IFS= read -r f; do
-            out=$(php -l "$f" 2>&1)
-            if ! echo "$out" | grep -q "No syntax errors"; then
-              echo "✗ $f"
-              echo "$out"
-              fail=1
-            fi
-          done < <(find src -name "*.php")
-          [ "$fail" = "0" ] && echo "✓ All PHP files syntactically valid"
-          exit $fail
+          if [[ -e composer.lock || -e vendor ]]; then
+            printf '%s\n' 'A fresh library resolution requires no existing lock or vendor directory.' >&2
+            exit 1
+          fi
+          case "$DEPENDENCY_RESOLUTION" in
+            latest)
+              composer update --no-interaction --prefer-dist --no-progress
+              ;;
+            lowest)
+              composer update --no-interaction --prefer-dist --no-progress --prefer-lowest --prefer-stable
+              ;;
+            *)
+              printf '%s\n' 'Unknown dependency resolution policy.' >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Log runtime and selected package versions
+        run: |
+          php --version
+          composer --version
+          composer show --format=json
+
+      - name: Audit resolved dependencies
+        run: composer audit --locked --no-interaction
+
+      - name: Check actual PHP platform requirements
+        run: composer check-platform-reqs --no-interaction
+
+      - name: Lint source and tests with nonempty inventories
+        run: |
+          mapfile -d '' -t source_files < <(find src -type f -name '*.php' -print0)
+          mapfile -d '' -t test_files < <(find tests -type f -name '*.php' -print0)
+          if (( ${#source_files[@]} == 0 || ${#test_files[@]} == 0 )); then
+            printf '%s\n' 'Both source and test inventories must contain PHP files.' >&2
+            exit 1
+          fi
+          for file in "${source_files[@]}" "${test_files[@]}"; do
+            php -l "$file"
+          done
+
+      - name: Run PHPUnit behavior tests
+        run: composer --no-interaction test

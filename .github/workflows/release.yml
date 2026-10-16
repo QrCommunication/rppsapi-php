@@ -5,55 +5,94 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
-  test:
-    name: Test
+  validate:
+    name: Validate stable tag and main ancestry
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          php-version: '8.3'
-          extensions: json, curl
+          ref: ${{ github.sha }}
+          fetch-depth: 0
 
-      - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist
+      - name: Validate tag and exact commit
+        id: tag
+        shell: bash
+        run: |
+          stable_ref='^refs/tags/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ ! "$GITHUB_REF" =~ $stable_ref || ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            printf '%s\n' 'A stable vX.Y.Z tag and exact commit SHA are required.' >&2
+            exit 1
+          fi
+          tag="${GITHUB_REF#refs/tags/}"
+          tag_commit="$(git rev-parse --verify "refs/tags/${tag}^{commit}")"
+          head_commit="$(git rev-parse --verify HEAD)"
+          if [[ "$tag_commit" != "$GITHUB_SHA" || "$head_commit" != "$GITHUB_SHA" ]]; then
+            printf '%s\n' 'Tag, event SHA and checked-out commit must match exactly.' >&2
+            exit 1
+          fi
+          git show-ref --verify --quiet refs/remotes/origin/main
+          git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Validate composer.json
-        run: composer validate --strict
+  test:
+    name: Test release commit
+    needs: validate
+    uses: ./.github/workflows/tests.yml
 
   release:
     name: Create GitHub Release
-    needs: test
+    needs: [validate, test]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
 
       - name: Extract release notes from CHANGELOG
-        id: changelog
         env:
-          VERSION: ${{ steps.version.outputs.VERSION }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
-          NOTES=$(awk "/^## \[${VERSION}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
-          if [ -z "$NOTES" ]; then
-            NOTES="Release ${VERSION}"
-          fi
-          echo "$NOTES" > release_notes.md
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ['RELEASE_TAG']
+          if re.fullmatch(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', tag) is None:
+              raise SystemExit('Invalid stable release tag.')
+          version = tag[1:]
+          lines = Path('CHANGELOG.md').read_text(encoding='utf-8').splitlines()
+          matches = []
+          for index, line in enumerate(lines):
+              heading = re.fullmatch(r'##[ \t]+\[([^\]\r\n]+)\](?:[ \t]+[^\r\n]*)?', line)
+              if heading is not None and heading.group(1) == version:
+                  matches.append(index)
+          if len(matches) != 1:
+              raise SystemExit('Exactly one changelog section must match the release version.')
+          start = matches[0] + 1
+          end = next((index for index in range(start, len(lines)) if re.match(r'^##(?:[ \t]|$)', lines[index])), len(lines))
+          notes = '\n'.join(lines[start:end]).strip()
+          if not re.sub(r'<!--.*?-->', '', notes, flags=re.S).strip():
+              raise SystemExit('The matching changelog section must contain release notes.')
+          Path('release_notes.md').write_text(notes + '\n', encoding='utf-8')
+          PY
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          name: v${{ steps.version.outputs.VERSION }}
+          tag_name: ${{ needs.validate.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.validate.outputs.tag }}
           body_path: release_notes.md
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: false

@@ -4,6 +4,15 @@ Toutes les modifications notables de ce projet sont documentees dans ce fichier.
 
 Format base sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
+## [Non publie]
+
+### Modifie
+
+- Dependances : `guzzlehttp/guzzle` elargi a `^7.0 || ^8.0` (teste sur 8.2), `guzzlehttp/promises`
+  a `^2.0 || ^3.0` (teste sur 3.0), `phpunit/phpunit` a `^10.0 || ^11.0 || ^12.0 || ^13.0`.
+  Les contraintes `php` sont inchangees (>= 8.1) : les dependances en version plus recente
+  restent compatibles.
+
 ## [1.0.0] - 2026-03-18
 
 ### Ajoute
